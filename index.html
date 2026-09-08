@@ -7202,12 +7202,13 @@ document.addEventListener('click', e=>{
    붙여넣기 전까지는 이 기능이 꺼진 상태로, 기존처럼 이 기기(localStorage)에만 저장됩니다.
    ============================================================ */
 const FIREBASE_CONFIG = {
-  apiKey: "PASTE_API_KEY",
-  authDomain: "PASTE.firebaseapp.com",
-  projectId: "PASTE_PROJECT_ID",
-  storageBucket: "PASTE.appspot.com",
-  messagingSenderId: "PASTE",
-  appId: "PASTE_APP_ID"
+  apiKey: "AIzaSyDFXA83MEniFddbr5G50eAWLiPUjanKWdE",
+  authDomain: "sci-pl.firebaseapp.com",
+  projectId: "sci-pl",
+  storageBucket: "sci-pl.firebasestorage.app",
+  messagingSenderId: "271727849665",
+  appId: "1:271727849665:web:7b21f7497363e37895a440",
+  measurementId: "G-3512RL19VS"
 };
 const CLOUD = { ready:false, on:false, user:null, auth:null, db:null, fs:null, authMod:null, timer:null, status:'', applying:false };
 function cloudConfigured(){ return FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && !/^PASTE|여기에|YOUR_/.test(FIREBASE_CONFIG.apiKey); }
