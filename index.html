@@ -706,7 +706,7 @@ function saveUser(){lsSet(LS_KEY,USER); if(typeof markChange==='function')markCh
 let USER = loadUser();
 let UCUST = lsGet(LS_CUST);   // [{nm,biz,ceo,tel,addr,cat,item,mgr,mtel,email,memo,pay,ar,ap,_u:1}]  pay: 결제구분 기본값(빈값=외상)
 let UITEM = lsGet(LS_ITEM);   // [{code,nm,grp,spec,unit,buy,sell,stock,_u:1}]
-let RC = lsGet(LS_RC);        // 임대 계약 [{id,party,eqNo,model,serial,installDate,basePrice,contractM,contractC,extraM,extraC,vatIncluded,active,memo}]
+let RC = lsGet(LS_RC);        // 임대 계약 [{id,party,eqNo,model,serial,installDate,basePrice,contractM,contractC,extraM,extraC,vatIncluded,active,endDate,memo}]  endDate: 해지(철수)일
 let RM = lsGet(LS_RM);        // 월 카운터 [{id,contractId,ym,closeDate,prevM,prevC,currM,currC,discount,actualAmount,memo,completed,salesTxId}]
 function saveCust(){lsSet(LS_CUST,UCUST); if(typeof markChange==='function')markChange();}
 function saveItem(){lsSet(LS_ITEM,UITEM); if(typeof markChange==='function')markChange();}
@@ -5151,7 +5151,7 @@ function drawRentalList(){
   const body=document.getElementById('rentalBody');
   let html='';
   if(rentalEdit){
-    const c = (rentalEdit==='new') ? {id:uid(),party:'',eqNo:'',model:'',serial:'',installDate:todayStr(),closeDay:5,basePrice:0,contractM:0,contractC:0,extraM:0,extraC:0,vatIncluded:true,initialM:0,initialC:0,active:true,memo:'',contractStart:'',contractEnd:'',contractMonths:'',installAddr:''} : RC.find(x=>x.id===rentalEdit);
+    const c = (rentalEdit==='new') ? {id:uid(),party:'',eqNo:'',model:'',serial:'',installDate:todayStr(),closeDay:5,basePrice:0,contractM:0,contractC:0,extraM:0,extraC:0,vatIncluded:true,initialM:0,initialC:0,active:true,endDate:'',memo:'',contractStart:'',contractEnd:'',contractMonths:'',installAddr:''} : RC.find(x=>x.id===rentalEdit);
     if(!c){rentalEdit=null;return drawRentalList();}
     html += `<div class="card panel" style="border:2px solid var(--brand);margin-bottom:14px">
       <div class="panel-head"><h3>${rentalEdit==='new'?'새 장비 등록':'장비 수정'}</h3></div>
@@ -5197,6 +5197,7 @@ function drawRentalList(){
           <div class="fld"><label>이월카운터 — 흑백 (M)</label><input id="rcIM" class="r" inputmode="numeric" value="${c.initialM||0}"></div>
           <div class="fld"><label>이월카운터 — 컬러 (C)</label><input id="rcIC" class="r" inputmode="numeric" value="${c.initialC||0}"></div>
           <div class="fld"><label>상태</label><select id="rcActive"><option value="1" ${c.active!==false?'selected':''}>사용 중</option><option value="0" ${c.active===false?'selected':''}>해지/만료</option></select></div>
+          <div class="fld" id="rcEndWrap" style="${c.active===false?'':'display:none'}"><label>해지일 (철수일)</label><input type="date" id="rcEndDate" value="${esc(c.endDate||'')}"></div>
         </div>
         <div class="fld"><label>메모</label><input id="rcMemo" value="${esc(c.memo||'')}" placeholder="비고"></div>
         <div style="display:flex;gap:10px;margin-top:6px">
@@ -5259,7 +5260,7 @@ function drawRentalList(){
       <td class="r muted">${c.extraM||c.extraC?`${fmt(c.extraM||0)} / ${fmt(c.extraC||0)}`:'-'}</td>
       <td class="muted">${c.vatIncluded?'포함':'면세'}</td>
       <td class="muted" style="font-size:11px;max-width:140px">${esc(c.memo||'')||'-'}</td>
-      <td>${c.active!==false?'<span style="color:var(--income);font-weight:600">사용</span>':'<span class="muted">해지</span>'}</td>
+      <td>${c.active!==false?'<span style="color:var(--income);font-weight:600">사용</span>':`<span class="muted">해지</span>${c.endDate?`<br><span class="muted" style="font-size:10.5px">${esc(c.endDate)}</span>`:''}`}</td>
       <td class="r act"><button class="btn xs" data-rcedit="${c.id}">수정</button></td>
     </tr>`).join('')}
     </tbody></table></div>`;
@@ -5274,6 +5275,7 @@ function drawRentalList(){
       </div>
       <div class="meta">
         <div class="m"><span>상태</span>${c.active!==false?'<b style="color:var(--income)">사용중</b>':'<span class="muted">해지/만료</span>'}</div>
+        ${(c.active===false&&c.endDate)?`<div class="m"><span>해지일(철수)</span>${esc(c.endDate)}</div>`:''}
         <div class="m"><span>마감일</span>매월 ${closeDayLabel(c.closeDay||5)}</div>
         ${c.installDate?`<div class="m"><span>설치일</span>${esc(c.installDate)}</div>`:''}
         ${c.serial?`<div class="m"><span>일련번호</span>${esc(c.serial)}</div>`:''}
@@ -5314,7 +5316,15 @@ function drawRentalList(){
     };
     $('rcCStart').addEventListener('change',calcEnd);
     $('rcCMonths').addEventListener('input',calcEnd);
+    // 상태 전환: 해지 선택 시 해지일 칸 표시 + 비어있으면 오늘로 채움
+    const _actEl=$('rcActive');
+    if(_actEl) _actEl.onchange=()=>{
+      const off=_actEl.value==='0';
+      const w=$('rcEndWrap'); if(w) w.style.display=off?'':'none';
+      const ed=$('rcEndDate'); if(off && ed && !ed.value) ed.value=todayStr();
+    };
     $('rcSave').onclick=()=>{
+      const _active=$('rcActive').value==='1';
       const obj={
         id:(rentalEdit==='new')?uid():rentalEdit,
         party:$('rcParty').value.trim(),
@@ -5331,7 +5341,8 @@ function drawRentalList(){
         vatIncluded:$('rcVat').value==='1',
         initialM:+$('rcIM').value||0,
         initialC:+$('rcIC').value||0,
-        active:$('rcActive').value==='1',
+        active:_active,
+        endDate: _active ? '' : ($('rcEndDate').value || todayStr()),   // 해지일(철수일); 사용중이면 비움
         memo:$('rcMemo').value.trim(),
         contractStart:$('rcCStart').value||'',
         contractMonths:parseInt($('rcCMonths').value,10)||'',
