@@ -6072,8 +6072,11 @@ function completeRental(cid){
   const batch='rental_'+m.id;
   const dd=(m.closeDate||rentalDateOf(rentalYM,c));
   const noteVat=c.vatIncluded?'':'면세(세금계산서 미발행)';
-  const extraTotal=Math.round((calc.feeM||0)+(calc.feeC||0));   // 추가 사용료 합계
-  const baseTotal=amt-extraTotal;                                // 기본 임대료(할인·실청구 조정 반영)
+  // 분할 기준: 실청구액 중 '계약 기본임대료'까지는 기본료, 그 초과분만 추가 사용료로 잡는다.
+  // → 실청구를 기본료로 낮추면 추가료 0(=면제), 기본료보다 더 받으면 초과분만 추가료로 표시.
+  const baseContract = Math.round(+calc.base||0);               // 계약 기본임대료
+  const baseTotal = Math.min(amt, baseContract);                 // 기본 임대료(실청구 한도 내)
+  const extraTotal = Math.max(0, amt - baseContract);            // 추가 사용료 = 기본료 초과분
   const model=(c.model||'').trim();                              // 규격/옵션에 표시할 장비모델
   const rows=[];
   if(extraTotal>0 && baseTotal>0){
