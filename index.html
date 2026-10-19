@@ -7032,7 +7032,9 @@ function stmtCopy(copyLabel, leftIsRecv){
   const ROWS=8; // 품목 행 고정(빈칸 포함 총 8행)
   const body=rows.slice(0,ROWS).map(l=>{const vc=l._fixedS!=null?{s:l._fixedS,v:l._fixedV,t:l._fixedT}:vatCalc((l.q||0)*(l.pr||0),'과세포함');
     s+=vc.s;v+=vc.v;t+=vc.t;
-    return `<tr><td class="c">${esc(l.md||'')}</td><td>${esc(l.nm)}</td><td class="c">${esc(l.spec||'-')}</td>
+    const neg=(+l.q||0)<0;  // 수량 마이너스(할인 등) → 빨간 글씨
+    const rs=neg?' style="color:#d11"':'';
+    return `<tr${rs}><td class="c">${esc(l.md||'')}</td><td>${esc(l.nm)}</td><td class="c">${esc(l.spec||'-')}</td>
       <td class="c">${esc(l.unit||'')}</td><td class="r">${fmt(l.q)}</td><td class="r">${fmt(l.pr)}</td>
       <td class="r">${fmt(vc.s)}</td><td class="r">${fmt(vc.v)}</td></tr>`;}).join('');
   // 7행을 초과하는 품목은 합계에 누락되지 않도록 별도 합산
