@@ -2077,47 +2077,55 @@ function settleMap(){
     else if(t.g==='지급'){(m[t.p]=m[t.p]||{col:0,pay:0}).pay+=t.t}}
   return m;
 }
+// 이 외상 거래의 '남은 미수/미지급 금액' 계산.
+//  - 수금/지급 건의 _forTx(대상 거래 id) → 그 거래부터 먼저 충당(=클릭한 행 직접 처리)
+//  - 수금/지급 건의 _forBatch(대상 주문 batch) → 그 주문의 품목들에 먼저 충당(=매출/매입 건 전체 처리)
+//  - 지정 없는(일반) 수금은 오래된 외상부터 FIFO 충당
+function txRemaining(t){
+  if(t.pm) return 0;
+  if(t.g!=='수입'&&t.g!=='비용') return 0;
+  const p=t.p; if(!p) return t.t;
+  const payG = t.g==='수입' ? '수금' : '지급';
+  const credits = T.filter(x=>x.p===p && x.g===t.g && !x.pm)
+    .sort((a,b)=>{ const dc=(a.d||'').localeCompare(b.d||''); if(dc) return dc; return (a.id||'').localeCompare(b.id||''); });
+  const remain={}; credits.forEach(x=>remain[x.id]=x.t);
+  const byBatch={}; credits.forEach(x=>{ if(x.batch){(byBatch[x.batch]=byBatch[x.batch]||[]).push(x);} });
+  const settles = T.filter(x=>x.p===p && x.g===payG);
+  let pool=0;
+  for(const s of settles){
+    let amt=s.t;
+    if(s._forTx && remain[s._forTx]!=null){
+      const use=Math.min(remain[s._forTx], amt); remain[s._forTx]-=use; amt-=use;
+    } else if(s._forBatch && byBatch[s._forBatch]){
+      for(const x of byBatch[s._forBatch]){ if(amt<=0)break; const use=Math.min(remain[x.id], amt); remain[x.id]-=use; amt-=use; }
+    }
+    pool += amt; // 지정 충당 후 남은 금액은 일반 풀(FIFO)로
+  }
+  for(const x of credits){ if(pool<=0) break; const use=Math.min(remain[x.id], pool); remain[x.id]-=use; pool-=use; }
+  return remain[t.id]!=null ? Math.max(0,remain[t.id]) : t.t;
+}
+// 같은 주문(batch)의 품목 전체 남은 금액 합
+function batchRemaining(t){
+  if(!t.batch) return txRemaining(t);
+  return T.filter(x=>x.p===t.p && x.g===t.g && x.batch===t.batch && !x.pm)
+          .reduce((s,x)=>s+txRemaining(x), 0);
+}
+// 결제 상태: 'cash'(즉시결제) | 'paid' | 'partial' | 'unpaid' | ''
+function payStatus(t){
+  if(t.pm) return 'cash';
+  if(t.g!=='수입'&&t.g!=='비용') return '';
+  if(!t.p) return '';
+  const r=txRemaining(t);
+  if(r<=0.5) return 'paid';
+  if(r < (t.t||0)-0.5) return 'partial';
+  return 'unpaid';
+}
 function payLabel(t){
   // 결제 표기: 결제수단(pm) 있으면 그 수단. 없으면(외상) 시간순 FIFO로 수금/지급을 분배해서
   // 이 거래가 완납/일부/미수 중 어디에 해당하는지 정확히 판정.
   if(t.pm)return esc(t.pm);
-  if(t.g!=='수입'&&t.g!=='비용')return '';
-  const p = t.p; if(!p)return '';
-
-  // 같은 거래처·같은 g(수입/비용)의 외상 거래를 일자 오름차순으로 정렬
-  // (일자 같으면 그 다음 비교는 id로)
-  const credits = T
-    .filter(x=>x.p===p && x.g===t.g && !x.pm)
-    .sort((a,b)=>{
-      const dc=(a.d||'').localeCompare(b.d||''); if(dc) return dc;
-      return (a.id||'').localeCompare(b.id||'');
-    });
-
-  // 거래처 전체 수금(또는 지급) 합
-  const payG = t.g==='수입' ? '수금' : '지급';
-  let totalPaid=0;
-  for(const x of T){
-    if(x.p===p && x.g===payG) totalPaid+=x.t;
-  }
-
-  // 시간순으로 수금을 외상에 차례로 흡수시켜서 이 거래의 상태를 판정
-  let allocated=0;
-  let status='unpaid'; // 'paid' | 'partial' | 'unpaid'
-  for(const x of credits){
-    const before = allocated;
-    allocated += x.t;
-    if(x.id===t.id){
-      if(allocated <= totalPaid + 0.5){
-        status = 'paid';     // 이 거래까지 완납
-      } else if(before < totalPaid - 0.5){
-        status = 'partial';  // 일부만 수금됨
-      } else {
-        status = 'unpaid';   // 아직 수금 시작 안 됨
-      }
-      break;
-    }
-  }
-
+  const status=payStatus(t);
+  if(status===''||status==='cash') return '';
   if(t.g==='수입'){
     if(status==='paid') return '<span style="color:var(--collect)">수금완료</span>';
     if(status==='partial') return '<span style="color:var(--collect)">일부수금</span>';
@@ -2176,7 +2184,7 @@ function drawTx(){
         <td class="r num"><b>${won(t.t)}</b></td>
         <td class="muted">${payLabel(t)}</td>
         <td class="memo">${esc(t.note||'')||'<span class="muted">-</span>'}</td>
-        <td class="r act">${t._u?`<button class="btn xs" data-edit="${t.id}">수정</button>`:'<span class="muted" style="font-size:11px">기본</span>'}</td></tr>`;}).join('')}
+        <td class="r act"><div style="display:flex;gap:4px;justify-content:flex-end;flex-wrap:wrap">${(()=>{const st=payStatus(t);if(st==='unpaid'||st==='partial'){const isAR=t.g==='수입';return `<button class="btn xs primary" data-settlerow="${t.id}" style="white-space:nowrap">${isAR?'수금':'지급'}</button>`;}return '';})()}${t._u?`<button class="btn xs" data-edit="${t.id}">수정</button>`:'<span class="muted" style="font-size:11px">기본</span>'}</div></td></tr>`;}).join('')}
       </tbody></table>
     </div>
     <div class="tcards">
@@ -2193,7 +2201,7 @@ function drawTx(){
           ${t.m && t.m!==t.inm?`<div class="m"><span>적요</span>${esc(t.m)}</div>`:''}
           <div class="m"><span>결제</span>${payLabel(t)}</div>
           ${t.note?`<div class="m"><span>메모</span>${esc(t.note)}</div>`:''}
-          ${t._u?`<div style="margin-top:8px"><button class="btn sm" data-edit="${t.id}" style="width:100%">수정</button></div>`:''}
+          <div style="margin-top:8px;display:flex;gap:6px">${(()=>{const st=payStatus(t);if(st==='unpaid'||st==='partial'){const isAR=t.g==='수입';return `<button class="btn sm primary" data-settlerow="${t.id}" style="flex:1">${isAR?'수금 등록':'지급 등록'}</button>`;}return '';})()}${t._u?`<button class="btn sm" data-edit="${t.id}" style="flex:1">수정</button>`:''}</div>
         </div></div>`;}).join('')}
     </div>
   </div>
@@ -2202,7 +2210,75 @@ function drawTx(){
   ${tp>1?pager(txState.page,tp):''}`;
   el.querySelectorAll('[data-pg]').forEach(b=>b.onclick=()=>{txState.page=+b.dataset.pg;drawTx();window.scrollTo({top:0,behavior:'smooth'})});
   el.querySelectorAll('[data-edit]').forEach(b=>b.onclick=(e)=>{e.stopPropagation();editTxn(b.dataset.edit)});
+  el.querySelectorAll('[data-settlerow]').forEach(b=>b.onclick=(e)=>{
+    e.stopPropagation();
+    const t=T.find(x=>x.id===b.dataset.settlerow); if(!t)return;
+    openSettleModal(t.p, Math.round(txRemaining(t)), t.g==='수입', ()=>drawTx(), t);
+  });
   const pb=document.getElementById('txPrint'); if(pb)pb.onclick=printTxResult;
+}
+// 공용 수금/지급 등록 팝업 (전체조회 등 어디서든 호출). onDone: 저장 후 갱신 콜백. srcTx: 클릭한 거래 객체(지정 충당)
+function openSettleModal(party, amount, isAR, onDone, srcTx){
+  const label=isAR?'수금':'지급';
+  const accent=isAR?'var(--collect)':'var(--accent)';
+  const thisAmt=Math.round(amount||0);
+  const forTx = srcTx ? srcTx.id : '';
+  const forBatch = (srcTx && srcTx.batch) ? srcTx.batch : '';
+  // 이 매출/매입 주문(같은 batch 품목 전체)의 남은 금액 합
+  const totalAmt = srcTx ? Math.round(batchRemaining(srcTx)) : 0;
+  const hasTotal = forBatch && totalAmt>0 && totalAmt!==thisAmt;  // 주문에 품목이 여럿일 때만 선택지 표시
+  const ov=document.createElement('div');
+  ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:9998;display:flex;align-items:center;justify-content:center;padding:18px';
+  ov.innerHTML=`<div class="card panel" style="max-width:460px;width:100%;border-top:4px solid ${accent};max-height:92vh;overflow:auto" onclick="event.stopPropagation()">
+    <div class="panel-head"><h3>${esc(party||'(거래처)')} — ${label} 등록</h3></div>
+    <div class="form">
+      <div class="frow">
+        <div class="fld"><label>${label} 일자</label><input type="date" id="smDate" value="${todayStr()}"></div>
+        <div class="fld"><label>${label} 금액</label><input id="smAmt" class="r" inputmode="numeric" value="${thisAmt}"></div>
+      </div>
+      ${hasTotal?`<div class="fld"><label>자동 입력</label>
+        <div class="seg" style="display:inline-flex;flex-wrap:wrap;background:var(--surface-2);border-radius:9px;padding:3px;gap:3px">
+          <button type="button" class="btn xs" id="smThis">이 품목 (${fmt(thisAmt)})</button>
+          <button type="button" class="btn xs primary" id="smAll">${isAR?'매출':'매입'} 전체 (${fmt(totalAmt)})</button>
+        </div></div>`:''}
+      <div class="frow">
+        <div class="fld"><label>결제수단</label><select id="smPay"><option value="">선택 안 함</option>${(S.결제수단||[]).map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select></div>
+        <div class="fld"><label>메모</label><input id="smMemo" placeholder="(선택)"></div>
+      </div>
+      <div class="hint" style="margin-top:2px">${hasTotal?`‘이 품목’은 선택한 품목만, ‘${isAR?'매출':'매입'} 전체’는 같은 ${isAR?'매출':'매입'} 건의 모든 품목에 충당됩니다. `:'선택한 거래 금액이 기본 입력됩니다. '}전액 또는 일부만 등록할 수 있어요.</div>
+      <div style="display:flex;gap:10px;margin-top:10px">
+        <button class="btn primary" id="smSave" style="flex:1">${label} 등록</button>
+        <button class="btn" id="smCancel">취소</button>
+      </div>
+    </div></div>`;
+  const close=()=>{ov.remove();};
+  ov.onclick=close;
+  document.body.appendChild(ov);
+  // mode: 'batch'(매출/매입 전체) | 'tx'(이 품목만). 품목이 여럿이면 기본 '전체', 단일이면 'tx'
+  let mode = hasTotal ? 'batch' : 'tx';
+  if(hasTotal){ document.getElementById('smAmt').value=totalAmt; }
+  const amtEl=document.getElementById('smAmt');
+  amtEl.focus();
+  if(hasTotal){
+    const bThis=document.getElementById('smThis'), bAll=document.getElementById('smAll');
+    bThis.onclick=()=>{mode='tx'; amtEl.value=thisAmt; bThis.classList.add('primary'); bAll.classList.remove('primary');};
+    bAll.onclick =()=>{mode='batch'; amtEl.value=totalAmt; bAll.classList.add('primary'); bThis.classList.remove('primary');};
+  }
+  document.getElementById('smCancel').onclick=close;
+  document.getElementById('smSave').onclick=()=>{
+    const d=document.getElementById('smDate').value||todayStr();
+    const amt=numv(document.getElementById('smAmt'));
+    const pay=document.getElementById('smPay').value.trim();
+    const memo=document.getElementById('smMemo').value.trim();
+    if(!amt||amt<=0){alert('금액을 입력하세요.');return;}
+    const g=isAR?'수금':'지급';
+    const row={id:uid(),batch:uid(),d,g,p:party,a:g,m:memo||g,ic:'',inm:'',u:'',q:0,pr:0,s:amt,v:0,t:amt,pm:pay||'',tax:'',note:'',_u:1,_settle:1};
+    if(mode==='batch' && forBatch) row._forBatch=forBatch;       // '매출/매입 전체' → 같은 주문 품목에 충당
+    else if(forTx) row._forTx=forTx;                             // '이 품목' → 클릭한 거래에 충당
+    USER=USER.concat([row]);saveUser();rebuildT();
+    close();
+    if(typeof onDone==='function') onDone();
+  };
 }
 function printTxResult(){
   // 조회 결과만 인쇄 (현재 필터/페이지 한정)
