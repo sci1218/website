@@ -743,7 +743,7 @@ function savePayMethods(){
   if(typeof markChange==='function')markChange();
 }
 let MENU_HIDDEN = lsGet(LS_MNU); if(!Array.isArray(MENU_HIDDEN)) MENU_HIDDEN=[];
-function saveMenuHidden(){lsSet(LS_MNU, MENU_HIDDEN);}
+function saveMenuHidden(){lsSet(LS_MNU, MENU_HIDDEN); if(typeof markChange==='function')markChange();}
 function isMenuHidden(id){return MENU_HIDDEN.includes(id);}
 function toggleMenuHidden(id){
   // 정보(master)·설정(settings) 메뉴는 절대 숨길 수 없음 — 안 그러면 설정에 다시 못 들어감
@@ -758,7 +758,7 @@ function toggleMenuHidden(id){
 }
 
 let MENU_ORDER = lsGet(LS_MNUORD); if(!Array.isArray(MENU_ORDER)) MENU_ORDER=[];
-function saveMenuOrder(){lsSet(LS_MNUORD, MENU_ORDER);}
+function saveMenuOrder(){lsSet(LS_MNUORD, MENU_ORDER); if(typeof markChange==='function')markChange();}
 // 저장된 순서를 적용한 메뉴 배열 반환 (신규 메뉴는 뒤에 추가, 사라진 메뉴는 무시)
 function orderedMenus(){
   if(!MENU_ORDER.length) return MENUS.slice();
@@ -820,7 +820,7 @@ if(!THEME || typeof THEME!=='object' || Array.isArray(THEME)) THEME = {...THEME_
 if(!THEME.custom || typeof THEME.custom!=='object'){ THEME.custom={...THEME_DEFAULT.custom}; }
 if(!THEME.custom.brand) THEME.custom.brand=THEME_DEFAULT.custom.brand;
 if(!THEME.custom.accent) THEME.custom.accent=THEME_DEFAULT.custom.accent;
-function saveTheme(){lsSet(LS_THEME, THEME);}
+function saveTheme(){lsSet(LS_THEME, THEME); if(typeof markChange==='function')markChange();}
 // 웹폰트 동적 로드 (필요할 때만)
 const _loadedFonts={};
 function ensureWebFont(fontKey){
@@ -1052,7 +1052,7 @@ const LBL_DEFAULTS = {
 let LBL_OVERRIDES = lsGet(LS_LBL) || {};
 if(Array.isArray(LBL_OVERRIDES)) LBL_OVERRIDES = {}; // lsGet은 기본 []을 반환하므로 객체로 정규화
 const LBL = new Proxy({}, {get(_,k){return (LBL_OVERRIDES[k] && LBL_OVERRIDES[k].trim()) || LBL_DEFAULTS[k] || ''}});
-function saveLabels(){lsSet(LS_LBL,LBL_OVERRIDES);}
+function saveLabels(){lsSet(LS_LBL,LBL_OVERRIDES); if(typeof markChange==='function')markChange();}
 function setLabel(k,v){
   v=(v||'').trim();
   if(!v || v===LBL_DEFAULTS[k]) delete LBL_OVERRIDES[k];
@@ -1090,7 +1090,7 @@ const AI_PROVIDERS = {
 };
 let AI_CFG = lsGet(LS_AI) || {};
 if(Array.isArray(AI_CFG)) AI_CFG={};
-function saveAICfg(){lsSet(LS_AI, AI_CFG);}
+function saveAICfg(){lsSet(LS_AI, AI_CFG); if(typeof markChange==='function')markChange();}
 function aiEnabled(){
   const p=AI_CFG.provider;
   return p && AI_CFG.keys && AI_CFG.keys[p];
@@ -1230,7 +1230,7 @@ function secConfig(){
   if(c && !Array.isArray(c) && typeof c==='object') return c;
   return {enabled:false};
 }
-function secSaveConfig(c){lsSet(LS_SEC,c);}
+function secSaveConfig(c){lsSet(LS_SEC,c); if(typeof markChange==='function')markChange();}
 function secEnabled(){return !!secConfig().enabled;}
 async function secSet(password){
   const salt=_randomSalt();
@@ -7265,7 +7265,7 @@ const LS_BKPALERT='sci_backup_alert_v1'; // 백업 알림 ON/OFF (기본 ON)
 const BKP_THRESHOLD=10;  // 이 건수 이상 쌓이면 알림
 const BKP_HOURS=24;       // 또는 이 시간이 지나면 알림
 function backupAlertOn(){ try{const v=localStorage.getItem(LS_BKPALERT); return v===null?true:JSON.parse(v);}catch(e){return true;} }
-function setBackupAlert(on){ try{localStorage.setItem(LS_BKPALERT,JSON.stringify(!!on));}catch(e){} showBackupBannerIfNeeded(); }
+function setBackupAlert(on){ try{localStorage.setItem(LS_BKPALERT,JSON.stringify(!!on));}catch(e){} showBackupBannerIfNeeded(); if(typeof markChange==='function')markChange(); }
 function getBackupState(){
   try{const s=localStorage.getItem(LS_BKP); if(s)return JSON.parse(s);}catch(e){}
   return {lastBackupAt:null, changesSince:0};
