@@ -1620,6 +1620,7 @@ function wireMemo(){
     if(timer) clearTimeout(timer);
     timer = setTimeout(()=>{
       lsSet(LS_MEMO, ta.value);
+      if(typeof markChange==='function') markChange();   // 클라우드 자동저장 반영
       if(stat){
         const t = new Date();
         stat.textContent = `저장됨 ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`;
@@ -1702,7 +1703,7 @@ function dashCardOrder(){
   DASH_CARDS_DEFAULT.forEach(k=>{ if(!valid.includes(k)) valid.push(k); });
   return valid;
 }
-function saveDashOrder(order){ lsSet(LS_DASHORDER, order); }
+function saveDashOrder(order){ lsSet(LS_DASHORDER, order); if(typeof markChange==='function') markChange(); }
 function renderDashboard(){
   const ys=yearsList();
   // 거래가 없으면 연/월 선택 옵션이 비어있을 수 있으니, 현재 연도가 옵션에 없으면 추가
