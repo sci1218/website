@@ -6996,7 +6996,7 @@ function drawQDoc(){
      <div class="qmemo"><span class="fk">메모</span>
        <div style="flex:1">${qInfo.memo.map((m,i)=>`<div class="memo-l">${String(i+1).padStart(2,'0')}. ${esc(m)}</div>`).join('')}</div>
      </div>
-     <div class="dfootcopy">ⓒ WORKSHEETS Co. All rights reserved.</div>
+     <div class="dfootcopy">ⓒ ${esc(ISSUER.name)}. All rights reserved.</div>
    </div>`;
   bindSealDrag();
 }
