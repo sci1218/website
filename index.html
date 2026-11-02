@@ -3891,7 +3891,8 @@ function buildBackupPayload(){
       issuer: ISSUER||{},
       seal: SEAL||'',
       sealCfg: SEALCFG||{},
-      contractText: CT||{}
+      contractText: CT||{},
+      contractMaintText: CTM||{}
     }
   };
 }
@@ -3962,6 +3963,7 @@ function importAll(e){
       if(typeof st.seal==='string'){ SEAL=st.seal; saveSeal(); }
       if(st.sealCfg && typeof st.sealCfg==='object'){ SEALCFG=Object.assign(JSON.parse(JSON.stringify(SEALCFG_DEFAULT)),st.sealCfg); normalizeSealCfg(); saveSealCfg(); }
       if(st.contractText && typeof st.contractText==='object'){ CT=Object.assign(JSON.parse(JSON.stringify(CONTRACT_TEXT_DEFAULT)),st.contractText); saveContractText(); }
+      if(st.contractMaintText && typeof st.contractMaintText==='object'){ CTM=Object.assign(JSON.parse(JSON.stringify(CONTRACT_MAINT_TEXT_DEFAULT)),st.contractMaintText); saveContractMaintText(); }
       if(typeof applyTheme==='function') applyTheme();
       if(typeof buildNav==='function') buildNav();
     }
@@ -4004,6 +4006,7 @@ function applyBackupPayload(payload){
     if(typeof st.seal==='string'){ SEAL=st.seal; saveSeal(); }
     if(st.sealCfg && typeof st.sealCfg==='object'){ SEALCFG=Object.assign(JSON.parse(JSON.stringify(SEALCFG_DEFAULT)),st.sealCfg); normalizeSealCfg(); saveSealCfg(); }
     if(st.contractText && typeof st.contractText==='object'){ CT=Object.assign(JSON.parse(JSON.stringify(CONTRACT_TEXT_DEFAULT)),st.contractText); saveContractText(); }
+    if(st.contractMaintText && typeof st.contractMaintText==='object'){ CTM=Object.assign(JSON.parse(JSON.stringify(CONTRACT_MAINT_TEXT_DEFAULT)),st.contractMaintText); saveContractMaintText(); }
     if(typeof applyTheme==='function') applyTheme();
     if(typeof buildNav==='function') buildNav();
   }
@@ -4631,39 +4634,55 @@ function drawIssuerPane(){
 /* ============================================================
    계약서 양식 — 임대차 계약서 인쇄물의 고정 문구 편집
    ============================================================ */
+let ctEditType='lease'; // 설정 > 계약서 양식에서 편집 중인 유형: 'lease' | 'maint'
 function drawContractTextPane(){
   const body=document.getElementById('mBody');
-  const TA=(k,lbl,rows,hint)=>`<div class="fld"><label>${lbl}${hint?` <span style="color:var(--ink-faint);font-weight:500">· ${hint}</span>`:''}</label><textarea id="ct_${k}" rows="${rows}" style="font-size:12.5px;line-height:1.5">${esc(CT[k]||'')}</textarea></div>`;
+  if(ctEditType!=='maint' && ctEditType!=='lease') ctEditType='lease';
+  const isM = ctEditType==='maint';
+  const OBJ = isM ? CTM : CT;
+  const roleA = isM?'위탁자':'임차인', roleB = isM?'수탁자':'임대인';
+  const docName = isM?'유지보수':'임대차';
+  const clauseR = isM?'제1조 ~ 제12조':'제1조 ~ 제12조';
+  const TA=(k,lbl,rows,hint)=>`<div class="fld"><label>${lbl}${hint?` <span style="color:var(--ink-faint);font-weight:500">· ${hint}</span>`:''}</label><textarea id="ct_${k}" rows="${rows}" style="font-size:12.5px;line-height:1.5">${esc(OBJ[k]||'')}</textarea></div>`;
   body.innerHTML=`
   <div class="card panel">
     <div class="card-head"><h3>계약서 인쇄 양식</h3></div>
-    <p class="hint" style="margin:0 0 16px;line-height:1.55">임대차 계약서(4페이지) 인쇄물의 <b>고정 문구</b>를 직접 수정합니다. 문장 안에 <b>{임차인}</b> · <b>{임대인}</b> 을 넣으면 인쇄 시 거래처명·회사명으로 자동 치환됩니다. (장비·기간·금액 등 표 내용은 계약서 작성 화면에서 입력)</p>
+    <div style="display:flex;gap:6px;margin:2px 0 14px">
+      <button class="btn sm ${!isM?'primary':''}" id="ctEditLease">임대차 계약서</button>
+      <button class="btn sm ${isM?'primary':''}" id="ctEditMaint">유지보수 계약서</button>
+    </div>
+    <p class="hint" style="margin:0 0 16px;line-height:1.55"><b>${docName} 계약서</b>(4페이지) 인쇄물의 <b>고정 문구</b>를 직접 수정합니다. 문장 안에 <b>{${roleA}}</b> · <b>{${roleB}}</b> 을 넣으면 인쇄 시 거래처명·회사명으로 자동 치환됩니다. (장비·기간·금액 등 표 내용은 계약서 작성 화면에서 입력)</p>
     <div class="form" style="max-width:none">
       ${TA('coverTitle','① 표지 제목',2,'Enter로 줄바꿈')}
       ${TA('bodyTitle','② 본문 제목 (2페이지 상단)',1)}
       ${TA('topProse','③ 본문 상단 안내문 (1·2항)',5)}
       ${TA('bottomProse','④ 본문 하단 안내문 (6·7항)',5)}
-      ${TA('bankInfo','⑤ 입금계좌 안내',3,'예금주는 {임대인}으로 자동 표시')}
+      ${TA('bankInfo','⑤ 입금계좌 안내',3,`예금주는 {${roleB}}으로 자동 표시`)}
       ${TA('legalTitle','⑥ 일반조건 제목 (3·4페이지 상단)',1)}
-      ${TA('legalP3','⑦ 일반조건 1 — 제1조 ~ 제12조 (3페이지)',16)}
+      ${TA('legalP3',`⑦ 일반조건 1 — ${clauseR} (3페이지)`,16)}
       ${TA('legalP4','⑧ 일반조건 2 — 제13조 ~ 제20조 (4페이지)',16)}
       ${TA('signNote','⑨ 서명/날인 문구 (4페이지)',3)}
       <div style="display:flex;gap:10px;margin-top:6px">
         <button class="btn primary" id="ctSave" style="flex:1">저장</button>
         <button class="btn" id="ctReset">기본값 복원</button>
       </div>
-      <div class="hint" style="margin-top:4px">저장 후 계약서 작성 화면에서 인쇄하면 수정한 문구가 반영됩니다.</div>
+      <div class="hint" style="margin-top:4px">저장 후 계약서 작성 화면에서 해당 유형으로 인쇄하면 수정한 문구가 반영됩니다.</div>
     </div>
   </div>`;
   const g=id=>document.getElementById(id);
   const KEYS=['coverTitle','bodyTitle','topProse','bottomProse','bankInfo','legalTitle','legalP3','legalP4','signNote'];
+  const saveFn = isM ? saveContractMaintText : saveContractText;
+  g('ctEditLease').onclick=()=>{ ctEditType='lease'; drawContractTextPane(); };
+  g('ctEditMaint').onclick=()=>{ ctEditType='maint'; drawContractTextPane(); };
   g('ctSave').onclick=()=>{
-    KEYS.forEach(k=>{ const el=g('ct_'+k); if(el) CT[k]=el.value; });
-    saveContractText(); alert('계약서 양식이 저장되었습니다.');
+    KEYS.forEach(k=>{ const el=g('ct_'+k); if(el) OBJ[k]=el.value; });
+    saveFn(); alert(`${docName} 계약서 양식이 저장되었습니다.`);
   };
   g('ctReset').onclick=()=>{
-    if(!confirm('계약서 양식을 기본값으로 되돌릴까요? 수정한 모든 문구가 사라집니다.'))return;
-    CT=JSON.parse(JSON.stringify(CONTRACT_TEXT_DEFAULT)); saveContractText(); drawContractTextPane();
+    if(!confirm(`${docName} 계약서 양식을 기본값으로 되돌릴까요? 수정한 모든 문구가 사라집니다.`))return;
+    if(isM){ CTM=JSON.parse(JSON.stringify(CONTRACT_MAINT_TEXT_DEFAULT)); saveContractMaintText(); }
+    else { CT=JSON.parse(JSON.stringify(CONTRACT_TEXT_DEFAULT)); saveContractText(); }
+    drawContractTextPane();
   };
 }
 // 설정에서 직인/주소를 바꾸면 거래명세서·견적서 미리보기에 즉시 반영
@@ -6413,16 +6432,147 @@ const LS_CONTRACT_TEXT='sci_contract_text_v1';
 let CT=JSON.parse(JSON.stringify(CONTRACT_TEXT_DEFAULT));
 (function(){ try{ const s=localStorage.getItem(LS_CONTRACT_TEXT); if(s){ const o=JSON.parse(s); if(o&&typeof o==='object') CT=Object.assign(JSON.parse(JSON.stringify(CONTRACT_TEXT_DEFAULT)), o); } }catch(e){} })();
 function saveContractText(){ try{localStorage.setItem(LS_CONTRACT_TEXT,JSON.stringify(CT));}catch(e){} if(typeof markChange==='function')markChange(); }
+
+/* ── 유지보수 계약서 인쇄 양식(고정 문구) — 임대차와 별도, 설정에서 수정 가능 ── */
+const CONTRACT_MAINT_LEGAL_P3 = `제 1 조 (총 칙)
+
+위탁자와 수탁자는 본 계약에 따라 목적물에 대한 유지보수 사항을 이행함에 있어, 신의와 성실의 원칙에 입각하여 이를 이행하기로 한다.
+
+제 2 조 (계약의 구성)
+
+본 계약은 디지털 복합기 유지보수 계약서(이하 "본 계약서"), 디지털 복합기 유지보수 일반 조건(이하 "본 일반조건")으로 구성된다.
+각 계약 서류의 조건이 상충하는 경우 본 계약서의 효력이 우선한다.
+
+제 3 조 (목 적)
+
+본 계약은 수탁자가 위탁자가 보유·사용 중인 목적물을 유지보수(아래 제4조에서 정의함)함에 따른 대금의 지급과 이와 관련한 제반 사항을 규정함을 목적으로 한다.
+
+제 4 조 (유지보수)
+
+(1) 본 계약에서 유지보수라 함은 목적물의 예방 정비, 소모품의 공급 기타 목적물의 원활한 운영과 성능 유지를 위한 점검 및 수리 등 목적물과 관련한 일체의 관리, 유지, 보수 행위를 말한다.
+(2) 위탁자가 목적물의 고장수리 또는 소모품의 공급을 요구(이하 총칭하여 "고장신고") 할 경우 수탁자는 고장신고 후 4시간 내에 목적물 설치장소에 방문하여 해당 유지보수를 행하여야 하며, 평일 16시 이후의 고장신고는 향후 도래하는 최초 영업일(월~금 공휴일제외) 오전 9시에 신고된 것으로 간주한다.
+(3) 보수 SERVICE, 소모품 제공 등 일체의 작업실시는 수탁자의 영업시간내에 한한다. 단, 부득이한 사유로 수탁자의 영업시간 외에 실시하는 때에는 수탁자가 소정의 SERVICE 요금을 청구 할 수 있다.
+(4) 고장신고는 유선으로 하고 신고자와 접수자는 상호 상대방의 성명 및 시간을 기록한다.
+
+제 5 조 (유지보수요원의 보증 및 교체)
+
+(1) 수탁자는 유지보수를 수행함에 있어 본 계약에 따른 내용을 충분히 수행할 수 있는 숙련된 유지보수요원을 투입하여야 한다.
+(2) 수탁자의 유지보수요원이 불성실한 태도로 유지보수를 수행하여 목적물의 운영 및 유지보수에 차질이 빚어지는 경우 위탁자는 해당 유지보수요원의 교체를 요구 할 수 있으며 수탁자는 합리적인 사유가 없는 한 이에 응하여야 한다.
+
+제 6 조 (위탁자의 사업장 출입)
+
+본 계약의 수행을 위하여 수탁자가 위탁자의 사업장에 출입할 경우, 수탁자는 위탁자의 출입 관련 절차에 성실히 협조하여야 한다.
+
+제 7 조 (교육 및 관리 등)
+
+(1) 수탁자는 유지보수 개시 시 목적물의 조작 방법에 대하여 위탁자에게 적절한 교육을 하여야 하며, 그 이후에도 위탁자가 교육 요청을 하는 경우에는 이에 응하여야 한다.
+(2) 수탁자는 목적물의 응급처치 및 목적물 관리에 필요한 요령을 서면으로 정리하여 목적물과 함께 비치하여야 한다.
+(3) 위탁자는 목적물을 관리함에 있어 선량한 관리자로서의 의무를 다하여야 한다.
+
+제 8 조 (유지보수료)
+
+(1) 위탁자는 본 계약서에 정한 바에 따라 수탁자에게 유지보수료를 지급한다.
+(2) 본 계약의 최초월과 최종월에 유지보수료 계산 대상 기간이 1개월 미만에 해당함과 동시에 출력매수가 기본매수에 미달하면 실출력 매수 장당 단가를 곱한 금액을 해당 월의 유지보수료로 한다.
+(3) 본 조에 따른 유지보수료는 본 계약에 따른 목적물 유지보수와 관련하여 위탁자가 수탁자에게 지급하는 모든 금액의 총합이며, 본 계약에서 달리 정하지 아니하는 이상 수탁자는 본 계약과 관련하여 여하한 이유로도 위탁자에 추가 비용을 청구하지 아니한다.
+
+제 9 조 (소모품의 공급)
+
+(1) 수탁자는 목적물의 정상적인 운영에 필요한 소모품(토너 등)을 본 계약서에 정한 범위 내에서 공급한다.
+(2) 용지, 스테이플 등 통상의 사무 소모품과 위탁자의 고의·과실로 인한 부품 손상은 공급 범위에서 제외하며, 그 비용은 위탁자가 부담한다.
+
+제 10 조 (장비 보안)
+
+제품 사용에 있어 인쇄, 복사, 스캔, 팩스 문서등 모든 자료의 보관, 보안의 책임은 위탁자(사용자)에게 부여한다.
+
+제 11 조 (설치장소의 변경)
+
+위탁자는 목적물을 설치장소에서 사용함을 원칙으로 한다. 단, 설치장소를 변경하고자 할 때는 수탁자와 협의하여 변경하여야 하며, 해당 비용의 부담은 양 당사자가 협의하여 정한다.
+
+제 12 조 (재해위험에 대한 방지)
+
+(1) 위탁자는 목적물의 작동 중 이상이 발생하면 이를 즉시 수탁자에게 통지하여야 한다.
+(2) 위탁자는 수탁자의 승인 없이 목적물 수리를 위해 목적물을 분해하거나 합리적인 범위를 넘어서서 목적물을 임의로 조작하여 목적물의 고장 상태를 악화시켜서는 안 된다.
+(3) 수탁자는 목적물의 파손, 전기적 손해, 폭발 등의 사유가 위탁자의 고의나 중대한 과실에 의한 경우가 아닌 한 위탁자에게 그 비용을 부담시킬 수 없다.`;
+
+const CONTRACT_MAINT_LEGAL_P4 = `제 13 조 (지체에 관한 보상)
+
+수탁자가 위 제4조 (2)항을 위반할 경우, 위탁자는 목적물을 이용하여 할 수 있던 작업을 외부에서 수행한 후 해당 실비용을 증빙자료와 함께 수탁자에게 청구할 수 있으며, 위탁자는 수탁자에게 지급할 유지보수료에서 해당 금액을 공제할 수 있다.
+
+제 14 조 (계약의 해지)
+
+(1) 위탁자 또는 수탁자가 본 계약을 해지하고자 할 때에는 상대방에게 1개월 전에 문서로써 통지하여야 한다.
+(2) 각 당사자는 다음 각호의 경우 최고 없이 본 계약을 해지할 수 있다.
+          가. 상대방이 부도, 은행거래 정지, 워크아웃, 파산신청, 회생절차개시신청을 한 경우
+          나. 상대방이 자산에 대하여 압류, 가압류, 가처분, 소송, 경매 등의 강제집행을 당하여 사실상 본 계약을 이행할 수 없게 된 경우
+          다. 본 계약과 관련하여 뇌물 등 부정행위가 있는 경우
+(3) 각 당사자는 상대방에게 다음 각호의 사유가 발생한 경우, 15일 이상의 기간을 정하여 서면으로 시정을 요구할 수 있으며, 해당 시정요구 기간 내에 시정되지 아니하는 경우에는 본 계약을 해지할 수 있다.
+          가. 본 계약을 위반하고, 그 위반으로 인하여 본 계약의 목적을 달성할 수 없다고 인정되는 경우
+          나. 계약을 이행할 수 없는 객관적이고 명백한 사정이 발생한 경우
+(4) 본 계약의 해지는 기 발생한 양 당사자의 권리 및 의무에 영향을 미치지 아니한다.
+
+제 15 조 (계약위반에 따른 배상)
+
+(1) 수탁자의 귀책사유가 없이 위탁자가 본 계약기간을 준수하지 않고 일방 해지할 경우에는 직전 3개월 평균 유지보수료의 50% 해당금액을 계약잔여기간 월수에 승하여 수탁자에게 위약금으로 보상 하여야 한다.
+(2) 수탁자가 본 계약에 따른 유지보수를 2개월 이상 정당한 사유 없이 이행하지 아니하는 경우 위탁자는 계약을 일방 해지 할 수 있다.
+
+제 16 조 (계약의 연장)
+
+유지보수 계약기간 만료 1개월 전에 상호간 계약 연장과 관련된 협의를 진행 하도록 하며, 계약조건의 변경에 있어 특이사항이 없을 경우 본 계약내용으로 1년간 연장하도록 한다.
+
+제 17 조 (불가항력)
+
+양 당사자에 의한 본 계약의 이행이 천재지변, 기타 일방 당사자의 합리적인 통제 영역을 벗어난 사유로 불가능하게 된 경우에는 이로 인한 본 계약 위반 책임 및 상대방의 손해에 대한 책임이 면책된다.
+
+제 18 조 (비밀유지 의무)
+
+(1) 양 당사자는 본 계약의 내용 및 체결 사실, 기타 본 계약의 이행 과정에서 획득하거나 지득한 상대방 또는 제품에 관한 각종 정보 일체를 비밀로 유지하여야 한다.
+(2) 본 조의 비밀유지 의무는 기간 만료 등의 사유로 본 계약이 종료된 이후에도 [1]년 간 유효하다.
+
+제 19 조 (손해배상 및 책임의 한계)
+
+(1) 양 당사자는 본 계약 위반으로 인하여 상대방에게 손해를 끼쳤을 때에는 이로 인한 상대방의 손해에 대하여 배상을 하여야 한다.
+(2) 양 당사자는 고의로 인한 경우를 제외하고는 본 계약과 관련하여 상대방에게 발생한 특별손해, 간접손해 또는 귀결적 손해에 대하여 책임지지 아니한다.
+
+제 20 조 (기타 및 분쟁의 해결)
+
+(1) 본 계약과 관련하여 명시되지 아니한 사항에 관하여는 관계법령 및 일반 상관례에 의한다.
+(2) 양 당사자는 본 계약에 따른 지위를 상대방 당사자의 사전 서면 동의 없이 제3자에게 양도, 이전, 담보제공, 매각, 기타 어떠한 형태로든 처분할 수 없다.
+
+본 계약은 대한민국 법에 의하여 해석되고 규율된다. 본 계약으로 인한 당사자 간에 발생된 분쟁에 대하여는 상호 신의에 기초하여 원만히 해결하도록 최대한 노력하며, 그럼에도 불구하고 분쟁이 원만히 해결되지 아니할 경우에는 그 분쟁은 서울중앙지방법원을 배타적‧전속적 제1심 관할법원으로 하여 해결한다.`;
+
+const CONTRACT_MAINT_SIGN_NOTE = `* 위와 같이 본 계약이 체결되었음을 증명하기 위하여 "위탁자"와 "수탁자"는
+  본 계약서 2부를 작성하여 각 기명 날인한 후 1부씩 보관한다.`;
+
+const CONTRACT_MAINT_TEXT_DEFAULT = {
+  coverTitle: '삼성 디지털 복합기\n유지보수 계약서',
+  bodyTitle: '디지털 복합기 유지보수 계약서',
+  topProse: '1. 위탁자 {위탁자} 과(와) 수탁자 {수탁자} 는 상호 대등한 입장에서 본 디지털 복합기 유지보수 계약(이하 "본 계약")을 체결하고, 후일에 발생될지도 모를 법적 분쟁을 방지하기 위해 계약서 2부를 작성하여 쌍방이 각 기명 날인한 후 각각 1부씩 보관하기로 한다.\n\n2. 유지보수 대상 기종(이하 "목적물") 및 유지보수료: 본 계약을 이행하기 위한 목적물의 상세내역은 아래 5.항에 의한다.',
+  bottomProse: '6. 유지보수료 계산 및 청구 : 수탁자는 전월 해당일부터 당월 해당일까지 위 항목에 따라 해당 월의 유지보수료를 산정한 후, 매월 말일까지 계산서 및 증빙자료와 함께 위탁자에게 해당 유지보수료를 청구한다.\n\n7. 유지보수료 지급 : 위탁자는 청구된 유지보수료에 대한 이의가 없는 한 청구일로부터 20일 이내에 아래 입금 계좌로 지급한다.',
+  bankInfo: '■ 입금계좌 안내 ■\n▲ 예금주명 : {수탁자}    ▲ 은행명 : 우리은행    ▲ 계좌번호 : 1005-003-617815',
+  legalTitle: '디지털 복합기 유지보수 일반 조건',
+  legalP3: CONTRACT_MAINT_LEGAL_P3,
+  legalP4: CONTRACT_MAINT_LEGAL_P4,
+  signNote: CONTRACT_MAINT_SIGN_NOTE
+};
+const LS_CONTRACT_MAINT_TEXT='sci_contract_maint_text_v1';
+let CTM=JSON.parse(JSON.stringify(CONTRACT_MAINT_TEXT_DEFAULT));
+(function(){ try{ const s=localStorage.getItem(LS_CONTRACT_MAINT_TEXT); if(s){ const o=JSON.parse(s); if(o&&typeof o==='object') CTM=Object.assign(JSON.parse(JSON.stringify(CONTRACT_MAINT_TEXT_DEFAULT)), o); } }catch(e){} })();
+function saveContractMaintText(){ try{localStorage.setItem(LS_CONTRACT_MAINT_TEXT,JSON.stringify(CTM));}catch(e){} if(typeof markChange==='function')markChange(); }
 // {임차인}·{임대인} 치환(+굵게). esc 후 치환하므로 안전
 function ctSubst(t,f,lessor){
   return esc(String(t==null?'':t))
     .split('{임차인}').join(`<b>${esc((f&&f.party)||'')}</b>`)
-    .split('{임대인}').join(`<b>${esc((lessor&&lessor.name)||'')}</b>`);
+    .split('{위탁자}').join(`<b>${esc((f&&f.party)||'')}</b>`)
+    .split('{고객}').join(`<b>${esc((f&&f.party)||'')}</b>`)
+    .split('{임대인}').join(`<b>${esc((lessor&&lessor.name)||'')}</b>`)
+    .split('{수탁자}').join(`<b>${esc((lessor&&lessor.name)||'')}</b>`)
+    .split('{공급자}').join(`<b>${esc((lessor&&lessor.name)||'')}</b>`);
 }
 function ctPre(t,f,lessor){ return ctSubst(t,f,lessor); }                 // .pre(pre-wrap)용: 줄바꿈 그대로
 function ctBlock(t,f,lessor){ return ctSubst(t,f,lessor).replace(/\n/g,'<br>'); } // 일반 블록용: \n→<br>
 
 let contractForm = {
+  type:'lease', // 'lease'(임대차) | 'maint'(유지보수)
   party:'', contractDate:'', contractMonths:'', installAddr:'',
   devices:[{model:'', basePrice:'', contractM:'', contractC:'', extraM:'', extraC:''}],
   special:['','','']
@@ -6436,6 +6586,9 @@ function renderContract(){
   if(!contractForm.devices||!contractForm.devices.length) contractForm.devices=[contractBlankDevice()];
   if(!Array.isArray(contractForm.special)) contractForm.special=['','',''];
   while(contractForm.special.length<3) contractForm.special.push('');
+  if(contractForm.type!=='maint' && contractForm.type!=='lease') contractForm.type='lease';
+  const isMaint = contractForm.type==='maint';
+  const docName = isMaint?'유지보수':'임대차';
 
   const deviceRows = contractForm.devices.map((d,i)=>`
     <div class="card" style="padding:12px 14px;margin-bottom:10px;background:var(--surface-2)" data-devrow="${i}">
@@ -6445,7 +6598,7 @@ function renderContract(){
       </div>
       <div class="frow">
         <div class="fld" style="flex:2"><label>모델 (기종)</label><input class="input ct-d" data-di="${i}" data-dk="model" value="${esc(d.model)}" placeholder="예: SL-X4220RX"></div>
-        <div class="fld"><label>기본임대료 (월, 원)</label><input class="input r ct-d" data-di="${i}" data-dk="basePrice" inputmode="numeric" value="${esc(d.basePrice)}" placeholder="0"></div>
+        <div class="fld"><label>${isMaint?'월 유지보수료 (원)':'기본임대료 (월, 원)'}</label><input class="input r ct-d" data-di="${i}" data-dk="basePrice" inputmode="numeric" value="${esc(d.basePrice)}" placeholder="0"></div>
       </div>
       <div class="frow">
         <div class="fld"><label>계약매수 흑백 (M)</label><input class="input r ct-d" data-di="${i}" data-dk="contractM" inputmode="numeric" value="${esc(d.contractM)}" placeholder="0"></div>
@@ -6458,9 +6611,14 @@ function renderContract(){
   content.innerHTML = `
   <div class="doc">
     <div class="card panel" style="max-width:860px;margin:0">
-      <div class="panel-head"><h3>임대차 계약서 작성</h3></div>
+      <div class="panel-head"><h3>${docName} 계약서 작성</h3>
+        <div style="display:flex;gap:4px">
+          <button class="btn sm ${!isMaint?'primary':''}" id="ctTypeLease">임대차</button>
+          <button class="btn sm ${isMaint?'primary':''}" id="ctTypeMaint">유지보수</button>
+        </div>
+      </div>
       <div class="frow">
-        <div class="fld"><label>거래처 (임차인)</label>
+        <div class="fld"><label>거래처 (${isMaint?'위탁자':'임차인'})</label>
           <input class="input" id="ctParty" value="${esc(contractForm.party)}" placeholder="거래처명"></div>
         <div class="fld"><label>계약(설치)일자</label><input type="date" class="input" id="ctCDate" value="${esc(contractForm.contractDate)}"></div>
         <div class="fld"><label>계약기간</label>
@@ -6472,7 +6630,7 @@ function renderContract(){
       <div class="fld"><label>설치주소</label><input class="input" id="ctAddr" value="${esc(contractForm.installAddr)}" placeholder="장비 설치 장소"></div>
 
       <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 8px">
-        <label style="font-weight:700;font-size:13px;color:var(--ink-soft)">임대 장비 (${contractForm.devices.length}대)</label>
+        <label style="font-weight:700;font-size:13px;color:var(--ink-soft)">${isMaint?'유지보수 장비':'임대 장비'} (${contractForm.devices.length}대)</label>
         <button class="btn sm" id="ctAddDev">+ 장비 추가</button>
       </div>
       ${deviceRows}
@@ -6519,9 +6677,11 @@ function renderContract(){
     renderContract();
   });
 
+  if(g('ctTypeLease')) g('ctTypeLease').onclick=()=>{ if(contractForm.type!=='lease'){ syncTop(); contractForm.type='lease'; renderContract(); } };
+  if(g('ctTypeMaint')) g('ctTypeMaint').onclick=()=>{ if(contractForm.type!=='maint'){ syncTop(); contractForm.type='maint'; renderContract(); } };
   g('ctPrint').onclick=()=>{ printContract(contractForm); };
   g('ctToEquip').onclick=()=>{ contractToEquipment(contractForm); };
-  g('ctClear').onclick=()=>{ contractForm={party:'',contractDate:'',contractMonths:'',installAddr:'',devices:[contractBlankDevice()],special:['','','']}; renderContract(); };
+  g('ctClear').onclick=()=>{ contractForm={type:contractForm.type||'lease',party:'',contractDate:'',contractMonths:'',installAddr:'',devices:[contractBlankDevice()],special:['','','']}; renderContract(); };
 }
 
 // 계약서 입력값 → 새 장비 등록 (장비 여러 대면 각각)
@@ -6569,7 +6729,11 @@ function printContract(f){
   const cd = f.contractDate ? f.contractDate.split('-') : ['','',''];
   const today = todayStr();
   const won2 = v => v? fmt(+v) : '';
-  const lessor = ISSUER; // 임대인 = 삼성에스씨아이
+  const lessor = ISSUER; // 임대인/수탁자 = 삼성에스씨아이
+  const isMaint = f.type==='maint';
+  const T = isMaint ? CTM : CT;              // 유형별 고정 문구
+  const roleA = isMaint?'위탁자':'임차인';     // 거래처(고객)
+  const roleB = isMaint?'수탁자':'임대인';     // 당사
   // 약관 텍스트 → 조문 단위로 줄바꿈 살려 HTML
   const legalHtml = (txt)=> esc(txt).split(/\n/).map(line=>{
     const t=line.trim();
@@ -6600,7 +6764,7 @@ function printContract(f){
            <td colspan="5" style="text-align:right;padding-right:14px"><b>${w2(d.basePrice)} 원</b></td>
            <td>청구함</td>
          </tr>`).join('');
-  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>임대차 계약서 - ${esc(f.party)}</title>
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${isMaint?'유지보수':'임대차'} 계약서 - ${esc(f.party)}</title>
    <style>
      *{box-sizing:border-box}
      body{font-family:'Malgun Gothic','맑은 고딕',-apple-system,sans-serif;color:#1a1d23;margin:0;font-size:12px;line-height:1.5}
@@ -6645,7 +6809,7 @@ function printContract(f){
    <div class="page cover-pg">
      <div class="cover">
        <div class="box">
-         <h1>${ctBlock(CT.coverTitle,f,lessor)}</h1>
+         <h1>${ctBlock(T.coverTitle,f,lessor)}</h1>
          <div class="party">${esc(f.party)}</div>
          <div class="meta">
            계약(설치) 일자<br>
@@ -6659,12 +6823,12 @@ function printContract(f){
 
    <!-- PAGE 2: 계약 내용 -->
    <div class="page data">
-     <h2>${esc(CT.bodyTitle)}</h2>
-     <div class="pre">${ctPre(CT.topProse,f,lessor)}</div>
+     <h2>${esc(T.bodyTitle)}</h2>
+     <div class="pre">${ctPre(T.topProse,f,lessor)}</div>
 
      <div class="clause"><span class="ttl">3. 계약 기간 :</span> 계약(설치) 일자(<b>${esc(f.contractDate||'________')}</b>)로부터 <b>${months||'____'}</b>개월 ${endStr?`(~ <b>${esc(endStr)}</b>)`:''} (계약기간 종료 후 자동연장)</div>
      <div class="clause"><span class="ttl">4. 설치 장소 :</span> ${esc(f.installAddr||'________________________________')}</div>
-     <div class="clause"><span class="ttl">5. 기종 및 청구 조건 :</span> 보증금 면제 <span style="float:right">(VAT 포함)</span></div>
+     <div class="clause"><span class="ttl">5. ${isMaint?'기종 및 유지보수 조건':'기종 및 청구 조건'} :</span> ${isMaint?'':'보증금 면제 '}<span style="float:right">(VAT 포함)</span></div>
      <table class="spec">
        <thead>
          <tr><th rowspan="2">구분</th><th rowspan="2">기종(모델)</th><th colspan="2">기본 매수</th><th colspan="2">초과 시 장당 추가요금</th><th rowspan="2">특이사항</th></tr>
@@ -6673,33 +6837,33 @@ function printContract(f){
        <tbody>${specRows}</tbody>
      </table>
      ${specLines.length?`<div class="speclist"><span class="ttl">특약사항</span><br>${specLines.map((s,i)=>`${i+1}. ${esc(s)}`).join('<br>')}</div>`:''}
-     <div class="pre">${ctPre(CT.bottomProse,f,lessor)}</div>
-     <div class="bank">${ctBlock(CT.bankInfo,f,lessor)}</div>
+     <div class="pre">${ctPre(T.bottomProse,f,lessor)}</div>
+     <div class="bank">${ctBlock(T.bankInfo,f,lessor)}</div>
      <div class="pgnum">2 / 4</div>
    </div>
 
    <!-- PAGE 3: 일반조건 1 -->
    <div class="page legal-pg">
-     <h2>${esc(CT.legalTitle)}</h2>
-     <div class="legal">${legalHtml(CT.legalP3)}</div>
+     <h2>${esc(T.legalTitle)}</h2>
+     <div class="legal">${legalHtml(T.legalP3)}</div>
      <div class="pgnum">3 / 4</div>
    </div>
 
    <!-- PAGE 4: 일반조건 2 + 서명 -->
    <div class="page legal-pg">
-     <h2>${esc(CT.legalTitle)}</h2>
-     <div class="legal">${legalHtml(CT.legalP4)}</div>
-     <div class="pre" style="margin-top:11px;font-size:10px">${esc(CT.signNote)}</div>
+     <h2>${esc(T.legalTitle)}</h2>
+     <div class="legal">${legalHtml(T.legalP4)}</div>
+     <div class="pre" style="margin-top:11px;font-size:10px">${esc(T.signNote)}</div>
      <div class="sign-area">
        <div class="sign-box">
-         <div class="role">임차인</div>
+         <div class="role">${roleA}</div>
          상호: ${esc(f.party)}<br>
          ${cust.biz?`등록번호: ${esc(cust.biz)}<br>`:'등록번호: ________________<br>'}
          ${cust.addr?`주소: ${esc(cust.addr)}<br>`:'주소: ________________<br>'}
          대표: ${esc(cust.ceo||'')} &nbsp;&nbsp; (인)
        </div>
        <div class="sign-box">
-         <div class="role">임대인</div>
+         <div class="role">${roleB}</div>
          상호: ${esc(lessor.name)}<br>
          등록번호: ${esc(lessor.reg)}<br>
          주소: ${esc(lessor.addr)}<br>
