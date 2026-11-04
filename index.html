@@ -199,6 +199,15 @@ input,select{font-family:inherit;font-size:inherit;color:inherit}
 .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:4px}
 .legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft)}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.cmp-legend{gap:8px;justify-content:center}
+.cmp-chip{display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:4px 11px;border:1.5px solid var(--border);border-radius:999px;font-size:12px;font-weight:700;color:var(--ink-soft);user-select:none;transition:border-color .15s,background .15s}
+.cmp-chip i{width:11px;height:11px;border-radius:3px;display:inline-block;flex:0 0 auto}
+.cmp-chip .cl{font-size:10px;font-weight:800;opacity:.32;margin-left:1px}
+.cmp-chip:hover{border-color:var(--ink-faint)}
+.cmp-chip.on{color:var(--ink);background:var(--surface)}
+.cmp-chip.on.inc{border-color:var(--income)} .cmp-chip.on.exp{border-color:var(--expense)} .cmp-chip.on.ni{border-color:#e8b200}
+.cmp-chip.on .cl{opacity:.9}
+.cmp-sub{font-size:11px;color:var(--ink-faint);margin-top:8px;text-align:center}
 
 /* table */
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -1449,12 +1458,16 @@ function filterPeriod(year,month){ // month='' → 연간, 'YYYY-MM' → 월간
 /* ============================================================
    CHARTS (hand-rolled SVG, offline-safe)
    ============================================================ */
-function chartMonthly(data){
+function chartMonthly(data, prev, cmp){
+  prev=prev||{}; cmp=cmp||{};
   const W=640,H=240,pad={l:8,r:8,t:18,b:26};
   const iw=W-pad.l-pad.r, ih=H-pad.t-pad.b;
-  // 순이익은 음수일 수 있으니 절대값도 고려
-  const max=Math.max(1,...data.map(d=>Math.max(d.inc,d.exp,Math.abs(d.profit))));
+  // 순이익은 음수일 수 있으니 절대값도 고려. 전년값도 포함해 스케일 고정(토글해도 막대 안 흔들림)
+  const prevVals=[]; Object.values(prev).forEach(p=>{ prevVals.push(p.inc,p.exp,Math.abs(p.profit)); });
+  const max=Math.max(1,...data.map(d=>Math.max(d.inc,d.exp,Math.abs(d.profit))),...prevVals);
   const n=data.length, gap=8, gw=iw/n, bw=(gw-gap)/3; // 3개 막대(수입/비용/순이익)
+  const cxOf=i=>pad.l+i*gw+gw/2;
+  const yOf=v=>pad.t+ih-Math.abs(v)/max*ih;
   let bars='',labels='';
   data.forEach((d,i)=>{
     const x=pad.l+i*gw;
@@ -1462,14 +1475,23 @@ function chartMonthly(data){
     const profitH=Math.abs(d.profit)/max*ih;
     bars+=`<rect x="${x+gap/2}" y="${pad.t+ih-hi}" width="${bw}" height="${hi}" rx="2.5" fill="var(--income)"/>`;
     bars+=`<rect x="${x+gap/2+bw}" y="${pad.t+ih-he}" width="${bw}" height="${he}" rx="2.5" fill="var(--expense)"/>`;
-    // 순이익 막대: 양수면 accent, 음수면 빨강 계열
     // 순이익 막대: 양수면 밝은 노란색, 음수면 밝은 파란색
     const profitColor = d.profit>=0 ? '#f5c518' : '#3aa0ff';
     bars+=`<rect x="${x+gap/2+bw*2}" y="${pad.t+ih-profitH}" width="${bw}" height="${profitH}" rx="2.5" fill="${profitColor}"/>`;
     const mm=d.m.slice(5);
     labels+=`<text x="${x+gw/2}" y="${H-8}" text-anchor="middle" font-size="10.5" fill="var(--ink-faint)">${mm}월</text>`;
   });
-  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bars}${labels}</svg>`;
+  // 전년(선택연도−1) 같은 항목 — 흐린 선 오버레이 (켜진 것만)
+  let lines='';
+  [['inc','13,122,95',0.55],['exp','181,67,56',0.55],['ni','232,178,0',0.82]].forEach(([key,rgb,op])=>{
+    if(!cmp[key]) return;
+    const pts=[];
+    data.forEach((d,i)=>{ const p=prev[d.m.slice(5)]; if(!p)return; const val=key==='ni'?p.profit:p[key]; pts.push([cxOf(i),yOf(val)]); });
+    if(!pts.length) return;
+    lines+=`<polyline points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" stroke="rgba(${rgb},${op})" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
+    lines+=pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="var(--surface,#fff)" stroke="rgba(${rgb},${op})" stroke-width="1.8"/>`).join('');
+  });
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${bars}${lines}${labels}</svg>`;
 }
 function chartDonut(data,colors){
   const total=data.reduce((s,d)=>s+d.val,0)||1;
@@ -1698,6 +1720,17 @@ let dashY = String(new Date().getFullYear());
 let dashM = `${new Date().getFullYear()}-${String(new Date().getMonth()+1).padStart(2,'0')}`;
 let dashUserSet = false; // 사용자가 직접 변경했는지 추적
 let dashEditMode = false; // 카드 편집 모드
+// 전년 비교(월별 차트) — 범례 클릭으로 전년 같은 항목을 흐린 선으로 겹침
+let dashCmp = {inc:false, exp:false, ni:true}; // 기본: 순이익 전년선 ON
+let _dashMonths = [], _dashPrev = {};
+// 전년(선택연도−1) 월별 집계를 'MM'(월) 키로 반환
+function prevByMonthNum(y){
+  if(!y) return {};
+  const arr=byMonth(filterPeriod(String(+y-1),''));
+  const map={};
+  arr.forEach(d=>{ map[d.m.slice(5)]={inc:d.inc, exp:d.exp, profit:d.profit}; });
+  return map;
+}
 const DASH_CARDS_DEFAULT = ['chart','as','memo','top','recent','rental'];
 // 대시보드 설정: {order:[보이는 카드 순서], hidden:[숨긴 카드], size:{카드:칸수(1·2·3)}}
 // 구버전(배열=순서만)도 자동 호환
@@ -1736,6 +1769,7 @@ function renderDashboard(){
   const ar=partiesAll.reduce((s,p)=>s+Math.max(0,p.ar),0);
   const ap=partiesAll.reduce((s,p)=>s+Math.max(0,p.ap),0);
   const months=byMonth(dashY?filterPeriod(dashY,''):T); // 추이는 선택연도 전체월
+  _dashMonths=months; _dashPrev=dashY?prevByMonthNum(dashY):{}; // 전년 비교선 데이터
   const acc=byAccount(rows).filter(a=>a.g==='비용');
   const colors=['#b54338','#bd842f','#3565a8','#0d7a5f','#7a5ba8','#8a8f33','#c75d8e'];
   const topParty=parties.filter(p=>p.saleTot>0).slice(0,9);
@@ -1776,15 +1810,15 @@ function renderDashboard(){
     // 대시보드 카드 6종 — 사용자가 드래그로 순서 변경 가능
     const cards = {
       chart: `<div class="card panel">
-        <div class="panel-head"><h3>${dashY||''} ${esc(LBL.dash_chart)}</h3><span class="hint">막대 그래프</span></div>
+        <div class="panel-head"><h3>${dashY||''} ${esc(LBL.dash_chart)}</h3><span class="hint">전년 비교 · 항목 클릭</span></div>
         <div class="dash-body" style="display:flex;flex-direction:column;justify-content:center">
-        ${chartMonthly(months)}
-        <div class="legend">
-          <span><i style="background:var(--income)"></i>수입</span>
-          <span><i style="background:var(--expense)"></i>비용</span>
-          <span><i style="background:#f5c518"></i>순이익(+)</span>
-          <span><i style="background:#3aa0ff"></i>순이익(−)</span>
+        <div id="dashChartBox">${chartMonthly(months, _dashPrev, dashCmp)}</div>
+        <div class="legend cmp-legend">
+          <span class="cmp-chip inc ${dashCmp.inc?'on':''}" data-cmp="inc"><i style="background:var(--income)"></i>수입<b class="cl">전년</b></span>
+          <span class="cmp-chip exp ${dashCmp.exp?'on':''}" data-cmp="exp"><i style="background:var(--expense)"></i>비용<b class="cl">전년</b></span>
+          <span class="cmp-chip ni ${dashCmp.ni?'on':''}" data-cmp="ni"><i style="background:#f5c518"></i>순이익<b class="cl">전년</b></span>
         </div>
+        <div class="cmp-sub">색 막대 = ${dashY||'올해'} · 흐린 선 = ${dashY?(+dashY-1):'전년'} 전년 &nbsp;·&nbsp; 순이익 막대 <span style="color:#f5c518">흑자</span>/<span style="color:#3aa0ff">적자</span></div>
         </div>
       </div>`,
       as: `<div class="card panel">
@@ -1864,6 +1898,13 @@ function renderDashboard(){
   })()}
   </div>`;
   document.getElementById('dY').onchange=e=>{dashY=e.target.value;dashM='';dashUserSet=true;renderDashboard()};
+  // 전년 비교 범례 — 클릭 시 해당 항목 전년선 토글(차트만 다시 그림)
+  document.querySelectorAll('.cmp-chip').forEach(ch=>ch.onclick=()=>{
+    const k=ch.dataset.cmp; if(!k)return;
+    dashCmp[k]=!dashCmp[k]; ch.classList.toggle('on',dashCmp[k]);
+    const box=document.getElementById('dashChartBox');
+    if(box) box.innerHTML=chartMonthly(_dashMonths,_dashPrev,dashCmp);
+  });
   document.getElementById('dM').onchange=e=>{dashM=e.target.value;dashUserSet=true;renderDashboard()};
   wireMemo();
   // 카드 위치 변경 모드 토글
