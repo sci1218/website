@@ -199,15 +199,13 @@ input,select{font-family:inherit;font-size:inherit;color:inherit}
 .legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:4px}
 .legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft)}
 .legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
-.cmp-legend{gap:8px;justify-content:center}
-.cmp-chip{display:inline-flex;align-items:center;gap:6px;cursor:pointer;padding:4px 11px;border:1.5px solid var(--border);border-radius:999px;font-size:12px;font-weight:700;color:var(--ink-soft);user-select:none;transition:border-color .15s,background .15s}
-.cmp-chip i{width:11px;height:11px;border-radius:3px;display:inline-block;flex:0 0 auto}
-.cmp-chip .cl{font-size:10px;font-weight:800;opacity:.32;margin-left:1px}
+.cmp-legend{gap:7px;justify-content:center;align-items:center}
+.cmp-chip{display:inline-flex;align-items:center;gap:5px;cursor:pointer;padding:2px 9px;border:1.5px solid var(--border);border-radius:999px;font-size:12px;font-weight:700;color:var(--ink-soft);user-select:none;transition:border-color .15s,background .15s}
+.cmp-chip i{width:10px;height:10px;border-radius:3px;display:inline-block;flex:0 0 auto}
 .cmp-chip:hover{border-color:var(--ink-faint)}
 .cmp-chip.on{color:var(--ink);background:var(--surface)}
 .cmp-chip.on.inc{border-color:var(--income)} .cmp-chip.on.exp{border-color:var(--expense)} .cmp-chip.on.ni{border-color:#e8b200}
-.cmp-chip.on .cl{opacity:.9}
-.cmp-sub{font-size:11px;color:var(--ink-faint);margin-top:8px;text-align:center}
+.cmp-chip-note{font-size:11px;color:var(--ink-faint);font-weight:500}
 
 /* table */
 .tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
@@ -1466,7 +1464,8 @@ function chartMonthly(data, prev, cmp){
   const prevVals=[]; Object.values(prev).forEach(p=>{ prevVals.push(p.inc,p.exp,Math.abs(p.profit)); });
   const max=Math.max(1,...data.map(d=>Math.max(d.inc,d.exp,Math.abs(d.profit))),...prevVals);
   const n=data.length, gap=8, gw=iw/n, bw=(gw-gap)/3; // 3개 막대(수입/비용/순이익)
-  const cxOf=i=>pad.l+i*gw+gw/2;
+  // 각 막대 중심 x: slot 0=수입, 1=비용, 2=순이익
+  const slotCx=(i,slot)=>pad.l+i*gw+gap/2+bw*slot+bw/2;
   const yOf=v=>pad.t+ih-Math.abs(v)/max*ih;
   let bars='',labels='';
   data.forEach((d,i)=>{
@@ -1483,10 +1482,10 @@ function chartMonthly(data, prev, cmp){
   });
   // 전년(선택연도−1) 같은 항목 — 흐린 선 오버레이 (켜진 것만)
   let lines='';
-  [['inc','13,122,95',0.55],['exp','181,67,56',0.55],['ni','232,178,0',0.82]].forEach(([key,rgb,op])=>{
+  [['inc','13,122,95',0.55,0],['exp','181,67,56',0.55,1],['ni','232,178,0',0.82,2]].forEach(([key,rgb,op,slot])=>{
     if(!cmp[key]) return;
     const pts=[];
-    data.forEach((d,i)=>{ const p=prev[d.m.slice(5)]; if(!p)return; const val=key==='ni'?p.profit:p[key]; pts.push([cxOf(i),yOf(val)]); });
+    data.forEach((d,i)=>{ const p=prev[d.m.slice(5)]; if(!p)return; const val=key==='ni'?p.profit:p[key]; pts.push([slotCx(i,slot),yOf(val)]); });
     if(!pts.length) return;
     lines+=`<polyline points="${pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')}" fill="none" stroke="rgba(${rgb},${op})" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>`;
     lines+=pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.6" fill="var(--surface,#fff)" stroke="rgba(${rgb},${op})" stroke-width="1.8"/>`).join('');
@@ -1814,11 +1813,11 @@ function renderDashboard(){
         <div class="dash-body" style="display:flex;flex-direction:column;justify-content:center">
         <div id="dashChartBox">${chartMonthly(months, _dashPrev, dashCmp)}</div>
         <div class="legend cmp-legend">
-          <span class="cmp-chip inc ${dashCmp.inc?'on':''}" data-cmp="inc"><i style="background:var(--income)"></i>수입<b class="cl">전년</b></span>
-          <span class="cmp-chip exp ${dashCmp.exp?'on':''}" data-cmp="exp"><i style="background:var(--expense)"></i>비용<b class="cl">전년</b></span>
-          <span class="cmp-chip ni ${dashCmp.ni?'on':''}" data-cmp="ni"><i style="background:#f5c518"></i>순이익<b class="cl">전년</b></span>
+          <span class="cmp-chip inc ${dashCmp.inc?'on':''}" data-cmp="inc"><i style="background:var(--income)"></i>수입</span>
+          <span class="cmp-chip exp ${dashCmp.exp?'on':''}" data-cmp="exp"><i style="background:var(--expense)"></i>비용</span>
+          <span class="cmp-chip ni ${dashCmp.ni?'on':''}" data-cmp="ni"><i style="background:#f5c518"></i>순이익</span>
+          <span class="cmp-chip-note">클릭 시 전년 비교선</span>
         </div>
-        <div class="cmp-sub">색 막대 = ${dashY||'올해'} · 흐린 선 = ${dashY?(+dashY-1):'전년'} 전년 &nbsp;·&nbsp; 순이익 막대 <span style="color:#f5c518">흑자</span>/<span style="color:#3aa0ff">적자</span></div>
         </div>
       </div>`,
       as: `<div class="card panel">
