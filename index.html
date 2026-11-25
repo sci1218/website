@@ -5262,6 +5262,22 @@ function effectiveContract(c, m){
   }
   return c;
 }
+/* 미청구 추가 사용료(참고) 즉석 계산 — 기존 청구분(저장값 없는 건)도 거래명세서에 표기하기 위함.
+   완료 시점 단가 스냅샷(priceSnap)으로 과거 요율 그대로 계산. */
+function calcRefExtra(meterId){
+  const m=RM.find(x=>x.id===meterId); if(!m)return null;
+  const c=RC.find(x=>x.id===m.contractId); if(!c)return null;
+  const ec=effectiveContract(c,m);
+  const calc=calcRental(ec,m.prevM,m.prevC,m.currM||0,m.currC||0,m.discount);
+  const origExtra=Math.round((calc.feeM||0)+(calc.feeC||0));
+  const amt=(m.actualAmount!=null&&m.actualAmount!=='')?+m.actualAmount:calc.total;
+  const billedExtra=Math.max(0, amt - Math.round(calc.base||0));
+  const refExtra=Math.max(0, origExtra - billedExtra);
+  const u=[];
+  if(calc.extraM>0) u.push(`흑백 ${fmt(calc.extraM)}장`);
+  if(calc.extraC>0) u.push(`컬러 ${fmt(calc.extraC)}장`);
+  return {refExtra, usage:u.join(' · ')};
+}
 
 /* 직전 월의 currM/currC를 다음 달 prevM/prevC로 자동 carry */
 function prevReading(contractId, ym){
@@ -7310,11 +7326,19 @@ function pullStatement(quiet){
     return;
   }
   stLines=[];
+  const seenMeter={};
   rows.forEach(r=>{
     stLines.push({md:(r.d||'').slice(5).replace('-','/'),nm:r.inm||r.m||r.a,spec:r.spec||'',unit:r.u||'ea',q:r.q||1,pr:r.pr||r.t,_fixedS:r.s,_fixedV:r.v,_fixedT:r.t});
-    // 미청구 추가 사용료가 있으면 바로 아래에 '참고(미청구)' 줄 삽입 — 합계엔 포함 안 됨
-    if(r._refExtra>0){
-      stLines.push({md:'', nm:'추가 사용료 (참고·미청구)', spec:r._refExtraUsage||'', unit:'월', q:1, pr:r._refExtra, _ref:true});
+    // 미청구 추가 사용료 → '참고(미청구)' 줄 삽입(합계 제외). 저장값 우선, 없으면 검침기록으로 즉석 계산(기존 청구분)
+    let refExtra=0, usage='';
+    if(r._refExtra>0){ refExtra=r._refExtra; usage=r._refExtraUsage||''; }
+    else if(r._rentalMeterId && !seenMeter[r._rentalMeterId]){
+      const info=calcRefExtra(r._rentalMeterId);
+      if(info){ refExtra=info.refExtra; usage=info.usage; }
+    }
+    if(r._rentalMeterId) seenMeter[r._rentalMeterId]=true;
+    if(refExtra>0){
+      stLines.push({md:'', nm:'추가 사용료 (참고·미청구)', spec:usage, unit:'월', q:1, pr:refExtra, _ref:true});
     }
   });
   // 매출 입력 시 적은 메모를 자동으로 가져오기 (중복 제거 후 합침)
