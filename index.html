@@ -6273,6 +6273,16 @@ function completeRental(cid){
       m:rentalLabel(c,rentalYM), ic:'', inm:rentalLabel(c,rentalYM), spec:model, u:'월', q:1, pr:amt,
       s:vc.s, v:vc.v, t:vc.t, pm:'', tax:'', note:noteVat, _u:1, _rental:1, _rentalMeterId:m.id});
   }
+  // 미청구 추가 사용료(참고): 원래 계산된 추가료 중 이번에 청구하지 않은 금액 → 거래명세서에 '참고' 줄로 표기
+  const origExtraFee = Math.round((calc.feeM||0)+(calc.feeC||0));
+  const refExtra = Math.max(0, origExtraFee - extraTotal);
+  if(refExtra>0){
+    const u=[];
+    if(calc.extraM>0) u.push(`흑백 ${fmt(calc.extraM)}장`);
+    if(calc.extraC>0) u.push(`컬러 ${fmt(calc.extraC)}장`);
+    rows[0]._refExtra = refExtra;
+    rows[0]._refExtraUsage = u.join(' · ');
+  }
   USER.push(...rows); saveUser(); rebuildT();
   // 완료 시점에 단가 스냅샷·실청구액을 박아둠 → 이후 계약 단가가 바뀌어도 이 청구는 영향받지 않음
   m.completed=true;
@@ -7299,7 +7309,14 @@ function pullStatement(quiet){
     drawSLines(); drawSDoc();
     return;
   }
-  stLines=rows.map(r=>({md:(r.d||'').slice(5).replace('-','/'),nm:r.inm||r.m||r.a,spec:r.spec||'',unit:r.u||'ea',q:r.q||1,pr:r.pr||r.t,_fixedS:r.s,_fixedV:r.v,_fixedT:r.t}));
+  stLines=[];
+  rows.forEach(r=>{
+    stLines.push({md:(r.d||'').slice(5).replace('-','/'),nm:r.inm||r.m||r.a,spec:r.spec||'',unit:r.u||'ea',q:r.q||1,pr:r.pr||r.t,_fixedS:r.s,_fixedV:r.v,_fixedT:r.t});
+    // 미청구 추가 사용료가 있으면 바로 아래에 '참고(미청구)' 줄 삽입 — 합계엔 포함 안 됨
+    if(r._refExtra>0){
+      stLines.push({md:'', nm:'추가 사용료 (참고·미청구)', spec:r._refExtraUsage||'', unit:'월', q:1, pr:r._refExtra, _ref:true});
+    }
+  });
   // 매출 입력 시 적은 메모를 자동으로 가져오기 (중복 제거 후 합침)
   const notes=[...new Set(rows.map(r=>(r.note||'').trim()).filter(Boolean))];
   stInfo.memo = notes.join(' / ');
@@ -7309,7 +7326,7 @@ function pullStatement(quiet){
 function drawSLines(){
   const tb=document.getElementById('sBody');
   tb.innerHTML=stLines.map((l,i)=>{const vc=l._fixedS!=null?{s:l._fixedS}:vatCalc((l.q||0)*(l.pr||0),'과세포함');
-    return `<tr data-i="${i}">
+    return `<tr data-i="${i}"${l._ref?' style="background:#f6f6f6"':''}`+`>
       <td><input data-k="md" value="${esc(l.md)}" placeholder="03/15"></td>
       <td><input data-k="nm" value="${esc(l.nm)}"></td>
       <td><input data-k="spec" value="${esc(l.spec)}"></td>
@@ -7351,15 +7368,22 @@ function stmtCopy(copyLabel, leftIsRecv){
   // leftIsRecv: true → 공급받는자 보관용(받는자 왼쪽), false → 공급자 보관용(공급자 왼쪽)
   let s=0,v=0,t=0; const rows=stLines.filter(l=>l.nm||l.pr);
   const ROWS=8; // 품목 행 고정(빈칸 포함 총 8행)
-  const body=rows.slice(0,ROWS).map(l=>{const vc=l._fixedS!=null?{s:l._fixedS,v:l._fixedV,t:l._fixedT}:vatCalc((l.q||0)*(l.pr||0),'과세포함');
+  const body=rows.slice(0,ROWS).map(l=>{
+    // 참고(미청구) 줄 — 금액은 회색으로 보이되 합계엔 포함하지 않음
+    if(l._ref){
+      return `<tr style="color:#aaa"><td class="c">${esc(l.md||'')}</td><td>${esc(l.nm)}</td><td class="c">${esc(l.spec||'-')}</td>
+      <td class="c">${esc(l.unit||'')}</td><td class="r"></td><td class="r"></td>
+      <td class="r">(${fmt(l.pr)})</td><td class="r">미청구</td></tr>`;
+    }
+    const vc=l._fixedS!=null?{s:l._fixedS,v:l._fixedV,t:l._fixedT}:vatCalc((l.q||0)*(l.pr||0),'과세포함');
     s+=vc.s;v+=vc.v;t+=vc.t;
     const neg=(+l.q||0)<0;  // 수량 마이너스(할인 등) → 빨간 글씨
     const rs=neg?' style="color:#d11"':'';
     return `<tr${rs}><td class="c">${esc(l.md||'')}</td><td>${esc(l.nm)}</td><td class="c">${esc(l.spec||'-')}</td>
       <td class="c">${esc(l.unit||'')}</td><td class="r">${fmt(l.q)}</td><td class="r">${fmt(l.pr)}</td>
       <td class="r">${fmt(vc.s)}</td><td class="r">${fmt(vc.v)}</td></tr>`;}).join('');
-  // 7행을 초과하는 품목은 합계에 누락되지 않도록 별도 합산
-  rows.slice(ROWS).forEach(l=>{const vc=l._fixedS!=null?{s:l._fixedS,v:l._fixedV,t:l._fixedT}:vatCalc((l.q||0)*(l.pr||0),'과세포함');s+=vc.s;v+=vc.v;t+=vc.t;});
+  // 7행을 초과하는 품목은 합계에 누락되지 않도록 별도 합산 (참고 줄 제외)
+  rows.slice(ROWS).forEach(l=>{if(l._ref)return;const vc=l._fixedS!=null?{s:l._fixedS,v:l._fixedV,t:l._fixedT}:vatCalc((l.q||0)*(l.pr||0),'과세포함');s+=vc.s;v+=vc.v;t+=vc.t;});
   const blanks=Math.max(0, ROWS-Math.min(rows.length,ROWS));let pad='';for(let i=0;i<blanks;i++)pad+=`<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>`;
   const moreNote = rows.length>ROWS ? `<tr><td colspan="8" class="c" style="font-size:10px;color:#a23535">외 ${rows.length-ROWS}개 품목 합산 포함</td></tr>` : '';
   const ar=stInfo.to?curAR(stInfo.to):0;
